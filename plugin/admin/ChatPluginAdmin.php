@@ -59,7 +59,7 @@ class ChatPluginAdmin {
                     socket.on('message', function (data) {
                         if (data.room === selectedRoom) {
                             appendMessage(data.sender, data.message);
-                            alert('Nova mensagem recebida.!');
+                            alert('Nova mensagem recebida!');
                         }
                     });
                 });

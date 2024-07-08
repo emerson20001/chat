@@ -10,7 +10,6 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-
 require_once plugin_dir_path(__FILE__) . 'includes/ChatPluginAjax.php';
 require_once plugin_dir_path(__FILE__) . 'public/ChatPluginWidget.php';
 require_once plugin_dir_path(__FILE__) . 'admin/ChatPluginAdmin.php';

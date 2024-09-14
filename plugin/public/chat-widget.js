@@ -18,13 +18,13 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     let chatRoom = localStorage.getItem('chatRoom');
-    if (!chatRoom) {
+    
+    if (!chatRoom || chatRoom === null) {
         chatRoom = generateRoom();
         localStorage.setItem('chatRoom', chatRoom);
     }
-
+    
     chatRoomInput.value = chatRoom;
-    console.log(`Chat room: ${chatRoom}`);
 
     const storedPhone = localStorage.getItem('chatPhone');
     const storedEmail = localStorage.getItem('chatEmail');
@@ -32,11 +32,14 @@ document.addEventListener('DOMContentLoaded', function () {
     if (storedPhone && storedEmail) {
         chatPhone.value = storedPhone;
         chatEmail.value = storedEmail;
-        userInfo.style.display = 'none';
+       // userInfo.style.display = 'none';
     }
 
     let socket;
 
+    loadMessages();
+
+    /*
     chatToggle.addEventListener('click', function () {
         chatBox.style.display = chatBox.style.display === 'none' ? 'block' : 'none';
         loadMessages();
@@ -51,37 +54,23 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
     });
+    */
 
     chatForm.addEventListener('submit', function (e) {
         e.preventDefault();
-
+        // pega os dados enviados do fornm do chat
         const formData = new FormData(chatForm);
         const message = formData.get('message');
         const phone = formData.get('phone');
         const email = formData.get('email');
+        let chatRoom = localStorage.getItem('chatRoom');
 
         if (!storedPhone || !storedEmail) {
+            // seta em localstorage os dados enviados do fornm do chat
             localStorage.setItem('chatPhone', phone);
             localStorage.setItem('chatEmail', email);
-
-            fetch(getAjaxUrl('chat_plugin_create_room'), {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                },
-                body: `room=${chatRoom}&phone=${phone}&email=${email}`
-            }).then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    sendMessage(chatRoom, message, 'User', email);
-                } else {
-                    console.error('Erro ao criar a sala.');
-                    alert('Erro ao criar a sala.');
-                }
-            }).catch(err => {
-                console.error('Erro ao criar a sala.', err);
-                alert('Erro ao criar a sala.');
-            });
+            sendMessage(chatRoom, message, 'User', email);
+                
         } else {
             sendMessage(chatRoom, message, 'User', email);
         }
@@ -95,30 +84,44 @@ document.addEventListener('DOMContentLoaded', function () {
         chatMessages.scrollTop = chatMessages.scrollHeight; // Scroll to bottom
     }
 
-    function sendMessage(room, message, sender, email) {
-        fetch(getAjaxUrl('chat_plugin_send_message'), {
+    function sendMessage(chatRoom, message, sender, email) {
+        // Primeiro salva no banco do WordPress
+        fetch(getAjaxUrl('chat_plugin_save_message'), {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded'
             },
-            body: `room=${room}&message=${message}&sender=${sender}&email=${email}`
-        }).then(response => response.json())
+            body: `room=${chatRoom}&message=${message}&sender=${sender}&email=${email}`
+        })
+        .then(response => {
+        return response.json();
+        })
         .then(data => {
             if (data.success) {
+                // Adiciona a mensagem localmente no chat
                 appendMessage(sender, message);
+
+                // Reseta o formulário de chat e esconde informações do usuário
                 chatForm.reset();
-                userInfo.style.display = 'none';
-                socket.emit('join-room', { room });
-                socket.emit('message', { room, message, sender });
+                // userInfo.style.display = 'none';
+
+                // Primeiro, junta-se à sala no WebSocket (caso ainda não esteja na sala)
+                socket.emit('join-room', { room: chatRoom });
+
+                // Emite a mensagem para os participantes da sala via WebSocket
+                socket.emit('message', { room: chatRoom, message: message, sender: sender });
+
             } else {
-                console.error('Erro ao enviar a mensagem.');
-                alert('Erro ao enviar a mensagem.');
+                console.error('Erro ao salvar a mensagem no banco de dados.');
+                alert('Erro ao enviar a mensagem para o banco de dados.');
             }
-        }).catch(err => {
-            console.error('Erro ao enviar a mensagem.', err);
-            alert('Erro ao enviar a mensagem.');
+        })
+        .catch(err => {
+            console.error('Erro ao enviar a mensagem para o servidor.', err);
+            alert('Erro ao enviar a mensagem para o servidor.');
         });
     }
+
 
     function loadMessages() {
         fetch(getAjaxUrl('chat_plugin_load_messages'), {
@@ -131,9 +134,12 @@ document.addEventListener('DOMContentLoaded', function () {
         .then(data => {
             if (data.success) {
                 chatMessages.innerHTML = '';
+                 // Primeiro, junta-se à sala no WebSocket (caso ainda não esteja na sala)
+                socket.emit('join-room', { room: chatRoom });
                 data.data.forEach(msg => {
                     appendMessage(msg.sender, msg.message);
                 });
+               
             } else {
                 console.error('Sala não encontrada.');
                 alert('Sala não encontrada.');
@@ -143,40 +149,13 @@ document.addEventListener('DOMContentLoaded', function () {
             alert('Erro ao carregar as mensagens.');
         });
     }
-
+    
     socket = io(`http://localhost:3000`, { query: `room=${chatRoom}` });
     socket.on('message', function (data) {
+        console.log("Nova mensagem recebida!");
         if (data.room === chatRoom) {
             appendMessage(data.sender, data.message);
-            alert('Nova mensagem recebida!');
         }
     });
 
-    // Logic to check for new messages
-    setInterval(checkNewMessages, 5000);
-
-    function checkNewMessages() {
-        fetch(getAjaxUrl('chat_plugin_load_messages'), {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded'
-            },
-            body: `room=${chatRoom}`
-        }).then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                const currentMessages = chatMessages.children.length;
-                if (data.data.length > currentMessages) {
-                    alert('Nova mensagem recebida!');
-                    chatMessages.innerHTML = '';
-                    data.data.forEach(msg => {
-                        appendMessage(msg.sender, msg.message);
-                    });
-                }
-            }
-        }).catch(err => {
-            console.error('Erro ao verificar novas mensagens.', err);
-            alert('Erro ao verificar novas mensagens.');
-        });
-    }
 });

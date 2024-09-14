@@ -26,13 +26,15 @@ class ChatPluginAdmin {
                 <button type="submit">Selecionar Sala</button>
             </form>
             <div id="chat-container" style="width: 100%; height: 100%; display: flex; flex-direction: column;">
-                <div id="listmessage" style="flex: 1; border: 1px solid #ccc; overflow-y: auto; margin-top: 10px;"></div>
+                <div id="listmessage" style="flex: 1; border: 1px solid #ccc; overflow-y: auto; margin-top: 10px; max-height:150px; padding:15px 15px;"></div>
                 <div id="chat-reply" style="display: none; flex-direction: column; margin-top: 10px;">
                     <textarea id="reply-message" placeholder="Digite sua mensagem" style="width: 100%; height: 50px;"></textarea>
                     <button id="send-reply" style="background: #0073aa; color: #fff; border: none; padding: 10px 20px; border-radius: 5px;">Enviar</button>
                 </div>
             </div>
         </div>
+         <!-- Importando o Socket.IO -->
+        <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
         <script>
             document.addEventListener('DOMContentLoaded', function () {
                 const roomSelect = document.getElementById('chat-room-select');
@@ -46,48 +48,67 @@ class ChatPluginAdmin {
                     return `${url.origin}/wpchat/wp-admin/admin-ajax.php?action=${action}`;
                 }
 
-                let selectedRoom = null;
-                let socket = null;
+                let chatRoom = null;
+                let socket = null;              
+                
+                roomSelect.addEventListener('click', function () {
+                    // seleciona a sala ao clicar no option pela administração
+                    chatRoom = roomSelect.value;
+                    loadMessages(chatRoom);
 
-                roomSelect.addEventListener('change', function () {
-                    selectedRoom = roomSelect.value;
-                    loadMessages(selectedRoom);
-                    if (socket) {
+                    // Verifique se o socket já está aberto antes de fechá-lo
+                    if (socket && socket.connected) {
                         socket.close();
                     }
-                    socket = io(`http://localhost:3000`, { query: `room=${selectedRoom}` });
-                    socket.on('message', function (data) {
-                        if (data.room === selectedRoom) {
-                            appendMessage(data.sender, data.message);
-                            alert('Nova mensagem recebida.!');
-                        }
+
+                    // Conectando ao servidor com a nova sala selecionada
+                    socket = io(`http://localhost:3000`, { query: `room=${chatRoom}` });
+
+                    // Receber e exibir a mensagem do servidor
+                    socket.on('message', (data) => {
+                        loadMessages(chatRoom);
                     });
+
                 });
+
+   
 
                 sendReply.addEventListener('click', function () {
                     const message = replyMessage.value;
+                    
+                    // Exibir mensagem no chat localmente antes de enviar
                     appendMessage('Admin', message);
-                    replyMessage.value = '';
+                    replyMessage.value = ''; // Limpa o campo de entrada de mensagem
 
-                    fetch(getAjaxUrl('chat_plugin_send_message'), {
+                    // Enviar a mensagem via AJAX para salvar no servidor
+                    fetch(getAjaxUrl('chat_plugin_save_message'), {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/x-www-form-urlencoded'
                         },
-                        body: `room=${selectedRoom}&message=${message}&sender=Admin`
-                    }).then(response => response.json())
+                        body: `room=${chatRoom}&message=${message}&sender=Admin`
+                    })
+                    .then(response => response.json())
                     .then(data => {
                         if (data.success) {
-                            socket.emit('message', { room: selectedRoom, message, sender: 'Admin' });
+                            // Sala selecionada
+                            // Emitir a mensagem para a sala no socket
+                            socket.emit('join-room', { room: chatRoom });
+                            
+                            // Emitir a mensagem para os usuários na sala
+                            socket.emit('message', { room: chatRoom, message: message, sender: 'Admin' });
+
                         } else {
                             console.error('Erro ao enviar a mensagem.');
                             alert('Erro ao enviar a mensagem.');
                         }
-                    }).catch(err => {
+                    })
+                    .catch(err => {
                         console.error('Erro ao enviar a mensagem.', err);
                         alert('Erro ao enviar a mensagem.');
                     });
                 });
+
 
                 function appendMessage(sender, message) {
                     const messageElement = document.createElement('div');
@@ -97,17 +118,25 @@ class ChatPluginAdmin {
                     chatMessages.scrollTop = chatMessages.scrollHeight;
                 }
 
-                function loadMessages(room) {
+                function loadMessages(chatRoom) {
                     fetch(getAjaxUrl('chat_plugin_load_messages'), {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/x-www-form-urlencoded'
                         },
-                        body: `room=${room}`
-                    }).then(response => response.json())
+                        body: `room=${chatRoom}`
+                    })
+                    .then(response => {                         
+                        
+                        return response.json();
+                    })
                     .then(data => {
+                      
                         if (data.success) {
                             chatMessages.innerHTML = '';
+                            // Primeiro, junta-se à sala no WebSocket (caso ainda não esteja na sala)
+                            socket.emit('join-room', { room: chatRoom });
+                            
                             data.data.forEach(msg => {
                                 appendMessage(msg.sender, msg.message);
                             });
@@ -116,19 +145,13 @@ class ChatPluginAdmin {
                             console.error('Sala não encontrada.');
                             alert('Sala não encontrada.');
                         }
-                    }).catch(err => {
+                       
+                    })
+                    .catch(err => {
                         console.error('Erro ao carregar as mensagens.', err);
                         alert('Erro ao carregar as mensagens.');
                     });
                 }
-
-                socket = io(`http://localhost:3000`, { query: `room=${selectedRoom}` });
-                socket.on('message', function (data) {
-                    if (data.room === selectedRoom) {
-                        appendMessage(data.sender, data.message);
-                        alert('Nova mensagem recebida!');
-                    }
-                });
             });
         </script>
         <?php

@@ -6,12 +6,24 @@ class ChatPluginWidget {
         add_action('wp_footer', [$this, 'displayWidget']);
     }
 
+    // Enfileirar os scripts e estilos necessários
     public function enqueueScripts() {
+        // Enfileirar o CSS do widget
         wp_enqueue_style('chat-widget', plugin_dir_url(__FILE__) . 'chat-widget.css');
+
+        // Enfileirar o script do Socket.io
         wp_enqueue_script('socket-io', 'https://cdn.socket.io/4.7.5/socket.io.min.js', [], null, true);
+
+        // Enfileirar o script do chat widget
         wp_enqueue_script('chat-widget', plugin_dir_url(__FILE__) . 'chat-widget.js', ['socket-io'], false, true);
+
+        // Passar a URL do admin-ajax.php para o script do chat
+        wp_localize_script('chat-widget', 'chatPluginAjax', [
+            'ajax_url' => admin_url('admin-ajax.php')
+        ]);
     }
 
+    // Exibir o widget no rodapé do site
     public function displayWidget() {
         ?>
         <div id="chat-widget" class="chat-widget">

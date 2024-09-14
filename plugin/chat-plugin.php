@@ -10,7 +10,6 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-
 require_once plugin_dir_path(__FILE__) . 'includes/ChatPluginAjax.php';
 require_once plugin_dir_path(__FILE__) . 'public/ChatPluginWidget.php';
 require_once plugin_dir_path(__FILE__) . 'admin/ChatPluginAdmin.php';
@@ -22,19 +21,18 @@ function chat_plugin_activate() {
 
     $charset_collate = $wpdb->get_charset_collate();
 
-    $sql = "
-    CREATE TABLE IF NOT EXISTS {$wpdb->prefix}chat_rooms (
+    $sql_rooms = "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}chat_rooms (
         id INT AUTO_INCREMENT PRIMARY KEY,
         room_name VARCHAR(255) NOT NULL
-    ) $charset_collate;
+    ) $charset_collate;";
 
-    CREATE TABLE IF NOT EXISTS {$wpdb->prefix}chat_users (
+    $sql_users = "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}chat_users (
         id INT AUTO_INCREMENT PRIMARY KEY,
         phone VARCHAR(255) NOT NULL,
         email VARCHAR(255) NOT NULL
-    ) $charset_collate;
+    ) $charset_collate;";
 
-    CREATE TABLE IF NOT EXISTS {$wpdb->prefix}chat_messages (
+    $sql_messages = "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}chat_messages (
         id INT AUTO_INCREMENT PRIMARY KEY,
         chat_room_id INT,
         chat_user_id INT,
@@ -43,11 +41,12 @@ function chat_plugin_activate() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (chat_room_id) REFERENCES {$wpdb->prefix}chat_rooms(id),
         FOREIGN KEY (chat_user_id) REFERENCES {$wpdb->prefix}chat_users(id)
-    ) $charset_collate;
-    ";
+    ) $charset_collate;";
 
     require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
-    dbDelta($sql);
+    dbDelta($sql_rooms);
+    dbDelta($sql_users);
+    dbDelta($sql_messages);
 }
 
 new ChatPluginAjax();

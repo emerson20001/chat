@@ -2,99 +2,55 @@
 
 class ChatPluginAjax {
     public function __construct() {
-        add_action('wp_ajax_chat_plugin_create_room', [$this, 'createRoom']);
-        add_action('wp_ajax_nopriv_chat_plugin_create_room', [$this, 'createRoom']);
-        add_action('wp_ajax_chat_plugin_send_message', [$this, 'sendMessage']);
-        add_action('wp_ajax_nopriv_chat_plugin_send_message', [$this, 'sendMessage']);
+        add_action('wp_ajax_chat_plugin_save_message', [$this, 'saveMessage']);
+        add_action('wp_ajax_nopriv_chat_plugin_save_message', [$this, 'saveMessage']);
         add_action('wp_ajax_chat_plugin_load_messages', [$this, 'loadMessages']);
         add_action('wp_ajax_nopriv_chat_plugin_load_messages', [$this, 'loadMessages']);
     }
 
-    public function createRoom() {
-        $room = sanitize_text_field($_POST['room']);
-        $phone = sanitize_text_field($_POST['phone']);
-        $email = sanitize_email($_POST['email']);
+    
 
-        $response = wp_remote_post('http://localhost:3000/create-room', [
-            'body' => [
-                'room' => $room,
-                'phone' => $phone,
-                'email' => $email
-            ]
-        ]);
-
-        if (is_wp_error($response)) {
-            wp_send_json_error('Failed to create room.');
-        } else {
-            $body = wp_remote_retrieve_body($response);
-            $result = json_decode($body);
-            if ($result->success) {
-                global $wpdb;
-
-                // Ensure room exists in WordPress database
-                $room_id = $wpdb->get_var($wpdb->prepare(
-                    "SELECT id FROM {$wpdb->prefix}chat_rooms WHERE room_name = %s",
-                    $room
-                ));
-
-                if (!$room_id) {
-                    $wpdb->insert("{$wpdb->prefix}chat_rooms", [
-                        'room_name' => $room
-                    ]);
-                }
-
-                wp_send_json_success($result);
-            } else {
-                wp_send_json_error($result->message);
-            }
-        }
-    }
-
-    public function sendMessage() {
+    public function saveMessage() {
         global $wpdb;
 
+        // Sanitização dos campos recebidos
         $room = sanitize_text_field($_POST['room']);
         $message = sanitize_textarea_field($_POST['message']);
         $sender = sanitize_text_field($_POST['sender']);
         $email = sanitize_email($_POST['email']);
+        $phone = sanitize_text_field($_POST['phone']);
 
+        // Verifica se a sala já existe
         $room_id = $wpdb->get_var($wpdb->prepare(
             "SELECT id FROM {$wpdb->prefix}chat_rooms WHERE room_name = %s",
             $room
         ));
 
+        // Se a sala não for encontrada, cria a sala no banco de dados
         if (!$room_id) {
-            wp_send_json_error('Room not found.');
-            return;
+            $wpdb->insert("{$wpdb->prefix}chat_rooms", [
+                'room_name' => $room
+            ]);
+            $room_id = $wpdb->insert_id; // Recupera o ID da nova sala inserida
         }
 
+        // Verifica se o usuário já existe pelo e-mail
         $user_id = $wpdb->get_var($wpdb->prepare(
             "SELECT id FROM {$wpdb->prefix}chat_users WHERE email = %s",
             $email
         ));
 
+        // Se o usuário não existir, insere no banco de dados
         if (!$user_id) {
             $wpdb->insert("{$wpdb->prefix}chat_users", [
-                'phone' => sanitize_text_field($_POST['phone']),
+                'phone' => $phone,
                 'email' => $email
             ]);
             $user_id = $wpdb->insert_id;
         }
 
-        $response = wp_remote_post('http://localhost:3000/send-message', [
-            'body' => [
-                'room' => $room,
-                'message' => $message,
-                'sender' => $sender
-            ]
-        ]);
-
-        if (is_wp_error($response)) {
-            wp_send_json_error('Failed to send message.');
-        } else {
-            $body = wp_remote_retrieve_body($response);
-            $result = json_decode($body);
-            if ($result->success) {
+        // Faz a requisição externa para enviar a mensagem
+     
                 $wpdb->insert(
                     "{$wpdb->prefix}chat_messages",
                     [
@@ -104,12 +60,10 @@ class ChatPluginAjax {
                         'sender' => $sender
                     ]
                 );
-                wp_send_json_success();
-            } else {
-                wp_send_json_error($result->message);
-            }
-        }
+                wp_send_json_success($room);
+           
     }
+
 
     public function loadMessages() {
         global $wpdb;

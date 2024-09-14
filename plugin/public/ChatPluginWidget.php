@@ -8,18 +8,23 @@ class ChatPluginWidget {
 
     // Enfileirar os scripts e estilos necessários
     public function enqueueScripts() {
+        // Carregar configurações do arquivo config.php
+        $config = include plugin_dir_path(__FILE__) . '../includes/Config.php';
+        
         // Enfileirar o CSS do widget
         wp_enqueue_style('chat-widget', plugin_dir_url(__FILE__) . 'chat-widget.css');
 
         // Enfileirar o script do Socket.io
-        wp_enqueue_script('socket-io', 'https://cdn.socket.io/4.7.5/socket.io.min.js', [], null, true);
+        wp_enqueue_script('socket-io', $config['socket_io_url'], [], null, true);
 
         // Enfileirar o script do chat widget
-        wp_enqueue_script('chat-widget', plugin_dir_url(__FILE__) . 'chat-widget.js', ['socket-io'], false, true);
+        wp_enqueue_script('chat-widget-js', plugin_dir_url(__FILE__) . 'chat-widget.js', ['socket-io'], false, true);
 
-        // Passar a URL do admin-ajax.php para o script do chat
-        wp_localize_script('chat-widget', 'chatPluginAjax', [
-            'ajax_url' => admin_url('admin-ajax.php')
+        // Passar as configurações para o JavaScript
+        wp_localize_script('chat-widget-js', 'chatPluginConfig', [
+            'base_url'      => $config['base_url'],
+            'ajax_url'      => $config['ajax_url'],
+            'websocket_url' => $config['websocket_url'],
         ]);
     }
 
